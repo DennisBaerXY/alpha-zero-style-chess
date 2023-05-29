@@ -55,7 +55,9 @@ class Trainer:
                                                                             "White" if -current_player == 1 else "Black",
                                                                             state))
             reward = self.game.get_reward_for_player(state, current_player)
+
             if reward is not None:
+                print("Reward: ", reward)
                 # Game ended
                 return [(x[0], x[2], reward * ((-1) ** (x[1] != current_player))) for x in train_examples]
 
