@@ -4,6 +4,7 @@ Pipfile.lock
 # to everyone their own
 .vscode/
 .idea/
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
