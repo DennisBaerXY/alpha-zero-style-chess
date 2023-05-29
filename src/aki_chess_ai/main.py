@@ -57,21 +57,35 @@ class ChessEnv:
         if boardcopy.is_checkmate():
             print("Checkmate")
             if player == 1:
-                return 1
+                return 2
             else:
-                return -1
-
+                return -2
         if boardcopy.is_stalemate():
             print("Stalemate")
-            return 0
+            return 0.1
         if boardcopy.is_seventyfive_moves():
-            return 0
+            print("Seventyfive moves")
+            return 0.1
         if boardcopy.is_fivefold_repetition():
-            return 0
+            print("Fivefold repetition")
+            return 0.1
         if boardcopy.is_insufficient_material():
-            return 0
-        if boardcopy.legal_moves.count() > 0:
-            return None
+            print("Insufficient material")
+            return 0.1
+        if boardcopy.is_game_over():
+            print("Game over")
+            return 0.1
+        if boardcopy.is_variant_end():
+            print("Variant end")
+            return 0.1
+        if boardcopy.is_variant_draw():
+            print("Variant draw")
+            return 0.1
+        if boardcopy.is_variant_loss():
+            print("Variant loss")
+            return 0.1
+
+        return None
     def get_canonical_board(self, state, player):
         boardcopy = chess.Board(state)
         boardcopy.turn = player == 1

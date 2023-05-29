@@ -1,3 +1,4 @@
+import datetime
 import os
 import numpy as np
 from random import shuffle
@@ -11,6 +12,7 @@ from aki_chess_ai.MCTS import MCTS, Node
 from aki_chess_ai.ChessValueNetwork import ChessValueNetwork
 from aki_chess_ai.ChessPolicyNetwork import ChessPolicyNetwork
 import utils
+import time
 
 
 class Trainer:
@@ -25,11 +27,17 @@ class Trainer:
         self.value_optimizer = Adam(learning_rate=5e-4)
         self.policy_optimizer = Adam(learning_rate=5e-4)
 
+        # Initialize TensorBoard callback
+        log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.tensorboard_callback = callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+
     def execute_episode(self):
         train_examples = []
         current_player = 1
         state = self.game.get_state()
 
+        episode_step = 0
+        time_start = time.time()
 
         while True:
             self.mcts = MCTS(self.policy_model, self.value_model, self.game, self.args)
@@ -55,9 +63,14 @@ class Trainer:
                                                                             "White" if -current_player == 1 else "Black",
                                                                             state))
             reward = self.game.get_reward_for_player(state, current_player)
-
-            if reward is not None:
+            episode_step += 1
+            if reward is not None or episode_step > 200:
+                if reward is None:
+                    reward = 0
                 print("Reward: ", reward)
+                print("Episode step: ", episode_step)
+                print("Time: ", time.time() - time_start)
+
                 # Game ended
                 return [(x[0], x[2], reward * ((-1) ** (x[1] != current_player))) for x in train_examples]
 
@@ -72,27 +85,27 @@ class Trainer:
                 iteration_train_examples.extend(self.execute_episode())
             shuffle(iteration_train_examples)
             self.train(iteration_train_examples)
-            filename = self.args["checkpoint_path"] + "/model_" + str(i + 1) + ".h5"
+            filename = self.args["checkpoint_path"] + "/model_" + str(i + 1)
             self.save_checkpoint(folder=".", filename=filename)
             print("Model saved in file: %s" % filename)
 
-
     @tf.function
     def train_step(self, boards, target_pis, target_vs):
-        with tf.GradientTape() as tape:
+        with tf.GradientTape() as value_tape, tf.GradientTape() as policy_tape:
             out_pi = self.policy_model.model(boards, training=True)
             out_v = self.value_model.model(boards, training=True)
             l_pi = self.loss_pi(target_pis, out_pi)
             l_v = self.loss_v(target_vs, out_v)
             total_loss = l_pi + l_v
 
-        value_gradients = tape.gradient(total_loss, self.value_model.model.trainable_variables)
-        policy_gradients = tape.gradient(total_loss, self.policy_model.model.trainable_variables)
+        value_gradients = value_tape.gradient(total_loss, self.value_model.model.trainable_variables)
+        policy_gradients = policy_tape.gradient(total_loss, self.policy_model.model.trainable_variables)
 
         self.value_optimizer.apply_gradients(zip(value_gradients, self.value_model.model.trainable_variables))
         self.policy_optimizer.apply_gradients(zip(policy_gradients, self.policy_model.model.trainable_variables))
 
         return l_pi, l_v, out_pi, out_v
+
     def train(self, examples):
         pi_losses = []
         v_losses = []
@@ -116,6 +129,7 @@ class Trainer:
 
             print("Policy Loss", np.mean(pi_losses))
             print("Value Loss", np.mean(v_losses))
+
     def loss_pi(self, targets, outputs):
         loss = -tf.reduce_sum(targets * tf.math.log(outputs), axis=1)
         return tf.reduce_mean(loss)
@@ -125,11 +139,14 @@ class Trainer:
         return loss
 
     def save_checkpoint(self, folder, filename):
+        # Check if folder exists, if not, create it
         if not os.path.exists(folder):
-            os.mkdir(folder)
+            os.makedirs(folder)
 
-        value_filepath = os.path.join(folder, f"value_{filename}")
-        policy_filepath = os.path.join(folder, f"policy_{filename}")
+        # Check if the subdirectory for the models exists, if not, create it
+
+        value_filepath = os.path.join(folder, f"value_{filename}.h5")
+        policy_filepath = os.path.join(folder, f"policy_{filename}.h5")
 
         self.value_model.model.save_weights(value_filepath)
         self.policy_model.model.save_weights(policy_filepath)

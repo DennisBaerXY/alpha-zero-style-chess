@@ -12,7 +12,7 @@ def main():
         "batch_size": 64,
         "iterations": 500,  # Total number of training iterations
         "simulations": 10,  # Total number of MCTS simulations to run when deciding on a move to play
-        "episodes": 100,  # Number of full games (episodes) to run during each iteration
+        "episodes": 1,  # Number of full games (episodes) to run during each iteration
         "epochs": 5,  # Number of epochs of training per iteration
         "checkpoint_path": "training_models",  # location to save latest set of weights
         "debug": True
