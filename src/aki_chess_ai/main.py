@@ -30,6 +30,11 @@ class ChessEnv:
 
         # Return the current board state for a nn to use
         return state
+    def get_next_state(self, state, to_play, action):
+        pass
+    def get_canonical_board(self):
+        pass
+
 
     def _encode_piece(self, piece: chess.Piece, color=white):
         # 0.1 for white pawn, 0.2 for white knight, etc.
@@ -130,15 +135,26 @@ class ChessPolicyNetwork:
         logits = self.model.predict(state)[0]
         return logits
 
-    def select_move(self, state, valid_moves):
+    # Returns the probabilities of each legal move
+    def action_probabilities(self, state,valid_moves):
         logits = self.predict(state)
         valid_probs = np.array([logits[self._move_to_index(move)] for move in valid_moves])
         valid_probs = valid_probs - np.min(valid_probs)  # Shift probabilities to make them non-negative
         valid_probs_sum = np.sum(valid_probs)
         if valid_probs_sum > 0:
-            valid_probs = valid_probs / valid_probs_sum  # Normalize probabilities
-        move_idx = np.random.choice(len(valid_moves), p=valid_probs)
-        return valid_moves[move_idx]
+            valid_probs = valid_probs / valid_probs_sum
+        # Return a tuple of the legal moves and their probabilities
+        combined = zip(valid_moves, valid_probs)
+        return list(combined)
+
+
+    def select_move(self, state, valid_moves):
+# Get the probabilities of each legal move
+        probs = self.action_probabilities(state, valid_moves)
+        # Select a move according to the probability distribution
+        move = np.random.choice(valid_moves, p=probs)
+        return move
+
 
     def _move_to_index(self, move):
         # Convert UCI move to corresponding index
@@ -156,24 +172,11 @@ print(valueNetwork.predict(chessEnv.get_state(color=chess.WHITE)))
 
 # What move to make in this position
 policyNetwork = ChessPolicyNetwork()
-print(policyNetwork.select_move(chessEnv.get_state(color=chess.WHITE), chessEnv.get_valid_moves()))
+actionProbs = policyNetwork.action_probabilities(chessEnv.get_state(color=chess.WHITE), chessEnv.get_valid_moves())
+print(actionProbs)
 
-
-class MCTS:
-    def __init__(self, policy_network):
-        self.policy_network = policy_network
-
-    def search(self, state):
-        # MCTS search algorithm implementation here
-        pass
-
-    def select_action(self, state):
-        # Action selection based on MCTS search here
-        pass
-
-    def update_tree(self, action):
-        # Update tree based on chosen action here
-        pass
+# Print the sum of the probabilities
+print(np.sum([prob for _, prob in actionProbs]))
 
 
 
