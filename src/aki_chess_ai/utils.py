@@ -53,6 +53,10 @@ def _encode_piece_color(piece: chess.Piece, color=chess.WHITE):
 
 def move_to_index(move):
     # Convert UCI move to corresponding index
+    if isinstance(move, chess.Move):
+        from_square = move.from_square
+        to_square = move.to_square
+        return from_square * 64 + to_square
     from_square = chess.parse_square(move[:2])  # e2e4 -> e2
     to_square = chess.parse_square(move[2:4])  # e2e4 -> e4
     return from_square * 64 + to_square

@@ -12,8 +12,8 @@ def main():
         "batch_size": 64,
         "iterations": 500,  # Total number of training iterations
         "simulations": 10,  # Total number of MCTS simulations to run when deciding on a move to play
-        "episodes": 1,  # Number of full games (episodes) to run during each iteration
-        "epochs": 5,  # Number of epochs of training per iteration
+        "episodes": 10,  # Number of full games (episodes) to run during each iteration
+        "epochs": 10,  # Number of epochs of training per iteration
         "checkpoint_path": "training_models",  # location to save latest set of weights
         "debug": True
     }
@@ -22,6 +22,8 @@ def main():
     game = ChessEnv()
     valueNetwork = ChessValueNetwork()
     policyNetwork = ChessPolicyNetwork()
+
+
 
     trainer = Trainer(game, value_model=valueNetwork,policy_model=policyNetwork, args=args)
     trainer.learn()

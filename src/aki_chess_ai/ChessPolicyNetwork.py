@@ -15,6 +15,7 @@ class ChessPolicyNetwork:
             tf.keras.layers.Dense(4096)
         ])
         self.model.compile(optimizer="adam", loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True))
+        self.model.build((None, 64))
 
     def predict(self, state):
         if type(state) == str:
@@ -31,19 +32,26 @@ class ChessPolicyNetwork:
         logits = self.predict(state)
 
         if(len(valid_moves) == 1):
-            return [(valid_moves[0], 1)]
+            print("Only one move available")
 
         valid_probs = np.array([logits[self._move_to_index(move)] for move in valid_moves])
 
         valid_probs = utils.softmax(valid_probs)
-
-
-
-
-
         # Return a tuple of the legal moves and their probabilities
         combined = zip(valid_moves, valid_probs)
         return list(combined)
+    def action_probabilitiesThreaded(self, state, valid_moves):
+        logits = self.predict(state)
+
+        # if(len(valid_moves) == 1):
+            # print("Only one move available")
+
+        valid_probs = np.array([logits[self._move_toIndexThreaded(move)] for move in valid_moves])
+
+        valid_probs = utils.softmax(valid_probs)
+        # Return a tuple of the legal moves and their probabilities
+
+        return valid_probs
 
     def select_move(self, state, valid_moves):
         # Get the probabilities of each legal move
@@ -56,4 +64,8 @@ class ChessPolicyNetwork:
         # Convert UCI move to corresponding index
         from_square = chess.parse_square(move[:2])  # e2e4 -> e2
         to_square = chess.parse_square(move[2:4])  # e2e4 -> e4
+        return from_square * 64 + to_square
+    def _move_toIndexThreaded(self,move: chess.Move):
+        from_square = move.from_square
+        to_square = move.to_square
         return from_square * 64 + to_square

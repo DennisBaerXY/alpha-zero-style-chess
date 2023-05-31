@@ -13,6 +13,8 @@ class ChessValueNetwork:
             tf.keras.layers.Dense(1, activation="tanh")
         ])
         self.model.compile(optimizer="adam", loss="mse")
+        self.model.build((None, 64))
+
 
 
     def predict(self, state, to_play):
