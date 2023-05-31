@@ -136,9 +136,9 @@ def main():
     policy_model = ChessPolicyNetwork()
     value_model = ChessValueNetwork()
     start = time.time()
-    root = MCTS_Threaded(rootstate=state.fen(), itermax=5, policy_model=policy_model, value_model=value_model)
+    root = MCTS_Threaded(rootstate=state.fen(), itermax=5, policy_model=policy_model, value_model=value_model,max_depth=12)
     duration = time.time() - start
-    print(f"Recommended move: {root} ({duration:.2f}s)")
+    print(f"Recommended move: {root.select_child()} ({duration:.2f}s)")
 
 if __name__ == "__main__":
     main()

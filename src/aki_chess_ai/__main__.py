@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import logging
 from aki_chess_ai.main import ChessEnv
 from aki_chess_ai.ChessValueNetwork import ChessValueNetwork
 from aki_chess_ai.ChessPolicyNetwork import ChessPolicyNetwork
@@ -13,7 +13,7 @@ def main():
         "iterations": 500,  # Total number of training iterations
         "simulations": 10,  # Total number of MCTS simulations to run when deciding on a move to play
         "episodes": 10,  # Number of full games (episodes) to run during each iteration
-        "epochs": 10,  # Number of epochs of training per iteration
+        "epochs": 12,  # Number of epochs of training per iteration
         "checkpoint_path": "training_models",  # location to save latest set of weights
         "debug": True
     }
