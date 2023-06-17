@@ -5,18 +5,16 @@ import numpy as np
 from random import shuffle
 import logging
 
-import tensorflow as tf
-from keras import callbacks
-from keras.optimizers import Adam
-from tensorflow.python.ops import summary_ops_v2
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 from aki_chess_ai.MCTSThreaded import MCTS_Threaded
 from aki_chess_ai.main import ChessEnv
 from aki_chess_ai.MCTS import MCTS, Node
 from aki_chess_ai.ChessValueNetwork import ChessValueNetwork
 from aki_chess_ai.ChessPolicyNetwork import ChessPolicyNetwork
-
-from multiprocessing import Pool
 
 import utils
 import time
@@ -35,8 +33,7 @@ def execute_episode_func(game, policy_model, value_model, args):
     time_start = time.time()
 
     gc.collect()
-    tf.keras.backend.clear_session()  # Clear TensorFlow session
-    tf.compat.v1.reset_default_graph()  # Reset TensorFlow default graph
+    torch.cuda.empty_cache()  # Clear GPU memory
     print("Starting new episode")
     while True:
         root = MCTS_Threaded(state, itermax=4, policy_model=policy_model, value_model=value_model,
@@ -56,7 +53,7 @@ def execute_episode_func(game, policy_model, value_model, args):
             print("No action selected")
 
         state, current_player = game.get_next_state_for_game(state, action)
-        if (args["debug"]):
+        if args["debug"]:
             print("Move {} has been done by {}. Current FEN {} ".format(action,
                                                                         "White" if -current_player == 1 else "Black",
                                                                         state))
@@ -79,20 +76,16 @@ class Trainer:
         self.game = game
         self.args = args
 
-        self.strategy = tf.distribute.MirroredStrategy()
-        # Move the definition of your models and optimizers into a strategy.scope()
-        self.value_model = value_model
-        self.policy_model = policy_model
-        self.loss_pi = tf.keras.losses.CategoricalCrossentropy()
-        self.loss_v = tf.keras.losses.MeanSquaredError()
-        self.value_optimizer = Adam(learning_rate=5e-4)
-        self.policy_optimizer = Adam(learning_rate=5e-4)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.value_model = value_model.to(self.device)
+        self.policy_model = policy_model.to(self.device)
+        self.value_optimizer = optim.Adam(self.value_model.parameters(), lr=5e-4)
+        self.policy_optimizer = optim.Adam(self.policy_model.parameters(), lr=5e-4)
 
-
-        # Initialize TensorBoard callback
+        # Initialize TensorBoard writer
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        train_log_dir = 'logs/gradient_tape/' + current_time + '/train'
-        self.train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+        train_log_dir = f'logs/gradient_tape/{current_time}/train'
+        self.writer = SummaryWriter(train_log_dir)
 
         self.global_step = 0
 
@@ -105,8 +98,7 @@ class Trainer:
         time_start = time.time()
 
         gc.collect()
-        tf.keras.backend.clear_session()  # Clear TensorFlow session
-        tf.compat.v1.reset_default_graph()  # Reset TensorFlow default graph
+        torch.cuda.empty_cache()  # Clear GPU memory
 
         while True:
             root = MCTS_Threaded(state, itermax=4, policy_model=self.policy_model, value_model=self.value_model,
@@ -126,7 +118,7 @@ class Trainer:
                 print("No action selected")
 
             state, current_player = self.game.get_next_state_for_game(state, action)
-            if (self.args["debug"]):
+            if self.args["debug"]:
                 print("Move {} has been done by {}. Current FEN {} ".format(action,
                                                                             "White" if -current_player == 1 else "Black",
                                                                             state))
@@ -149,17 +141,12 @@ class Trainer:
         self.load_latest_checkpoint(folder=".")
 
         for i in range(self.args["iterations"]):
-            print("EPOCH ::: " + str(i + 1))
+            print("ITERATION ::: " + str(i + 1))
             iteration_train_examples = []
-            # Specify the number of processes to use
-            num_processes = 4
-            with Pool(num_processes) as p:
-                multi_res = [
-                    p.apply_async(execute_episode_func, (self.game, self.policy_model, self.value_model, self.args)) for
-                    _ in range(self.args["episodes"])]
-                result_list = [res.get() for res in multi_res]
-                for result in result_list:
-                    iteration_train_examples.extend(result)
+
+            for episode in range(self.args["episodes"]):
+                episode_result = execute_episode_func(self.game, self.policy_model, self.value_model, self.args)
+                iteration_train_examples.extend(episode_result)
 
             print("Number of examples: ", len(iteration_train_examples))
 
@@ -168,40 +155,46 @@ class Trainer:
 
             self.save_checkpoint()
 
-    @tf.function
     def train_step(self, boards, target_pis, target_vs):
-        with tf.GradientTape() as value_tape, tf.GradientTape() as policy_tape:
-            out_pi = self.policy_model.model(boards, training=True)
-            out_v = self.value_model.model(boards, training=True)
-            l_pi = self.loss_pi(target_pis, out_pi)
-            l_v = self.loss_v(target_vs, out_v)
-            total_loss = l_pi + l_v
+        boards = boards.to(self.device)
+        target_pis = target_pis.to(self.device)
+        target_vs = target_vs.to(self.device)
 
-        value_gradients = value_tape.gradient(total_loss, self.value_model.model.trainable_variables)
-        policy_gradients = policy_tape.gradient(total_loss, self.policy_model.model.trainable_variables)
+        self.policy_model.train()
+        self.value_model.train()
 
-        self.value_optimizer.apply_gradients(zip(value_gradients, self.value_model.model.trainable_variables))
-        self.policy_optimizer.apply_gradients(zip(policy_gradients, self.policy_model.model.trainable_variables))
+        out_pi = self.policy_model(boards)
+        out_v = self.value_model(boards)
 
-        with self.train_summary_writer.as_default():
-            tf.summary.scalar('Loss Policy', l_pi, step=self.global_step)
-            tf.summary.scalar('Loss Value', l_v, step=self.global_step)
+        l_pi = self.loss_pi(target_pis, out_pi)
+        l_v = self.loss_v(target_vs, out_v)
 
-        return l_pi, l_v, out_pi, out_v
+        self.policy_optimizer.zero_grad()
+        self.value_optimizer.zero_grad()
+        total_loss = l_pi + l_v
+        total_loss.backward()
+        self.policy_optimizer.step()
+        self.value_optimizer.step()
+
+        self.writer.add_scalar('Loss Policy', l_pi.item(), self.global_step)
+        self.writer.add_scalar('Loss Value', l_v.item(), self.global_step)
+
+        return l_pi.item(), l_v.item(), out_pi, out_v
 
     def train(self, examples):
         pi_losses = []
         v_losses = []
 
+        shuffle(examples)
         for epoch in range(self.args["epochs"]):
             batch_idx = 0
-
+            shuffle(examples)
             while batch_idx < int(len(examples) / self.args['batch_size']):
                 sample_ids = np.random.randint(len(examples), size=self.args['batch_size'])
                 boards, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
-                boards = np.array(boards, dtype=np.float32)
-                target_pis = np.array(pis, dtype=np.float32)
-                target_vs = np.array(vs, dtype=np.float32)
+                boards = torch.tensor(boards, dtype=torch.float32, device=self.device)
+                target_pis = torch.tensor(pis, dtype=torch.float32, device=self.device)
+                target_vs = torch.tensor(vs, dtype=torch.float32, device=self.device)
 
                 l_pi, l_v, out_pi, out_v = self.train_step(boards, target_pis, target_vs)
                 self.global_step += 1
@@ -215,11 +208,11 @@ class Trainer:
             print("Value Loss", np.mean(v_losses))
 
     def loss_pi(self, targets, outputs):
-        loss = -tf.reduce_sum(targets * tf.math.log(outputs), axis=1)
-        return tf.reduce_mean(loss)
+        loss = -torch.sum(targets * torch.log(outputs), dim=1)
+        return torch.mean(loss)
 
     def loss_v(self, targets, outputs):
-        loss = tf.reduce_sum(tf.square(targets - tf.reshape(outputs, [-1])), axis=0) / tf.shape(targets)[0]
+        loss = torch.sum((targets - outputs.view(-1)) ** 2) / targets.size(0)
         return loss
 
     def save_checkpoint(self):
@@ -238,8 +231,8 @@ class Trainer:
             os.makedirs(value_folder)
 
         # Get the latest checkpoint number
-        value_checkpoints = glob.glob(os.path.join(value_folder, 'model_*.h5'))
-        policy_checkpoints = glob.glob(os.path.join(policy_folder, 'model_*.h5'))
+        value_checkpoints = glob.glob(os.path.join(value_folder, 'model_*.pt'))
+        policy_checkpoints = glob.glob(os.path.join(policy_folder, 'model_*.pt'))
         checkpointNumberPolicy = 0
         checkpointNumberValue = 0
 
@@ -250,14 +243,14 @@ class Trainer:
             policy_checkpoints.sort()
             checkpointNumberValue = int(policy_checkpoints[-1].split('_')[-1].split('.')[0]) + 1
 
-        value_filepath = os.path.join(folder, f"value_training_models/model_{checkpointNumberValue}.h5")
-        policy_filepath = os.path.join(folder, f"policy_training_models/model_{checkpointNumberPolicy}.h5")
+        value_filepath = os.path.join(folder, f"value_training_models/model_{checkpointNumberValue}.pt")
+        policy_filepath = os.path.join(folder, f"policy_training_models/model_{checkpointNumberPolicy}.pt")
 
-        self.value_model.model.save_weights(value_filepath)
-        self.policy_model.model.save_weights(policy_filepath)
+        torch.save(self.value_model.state_dict(), value_filepath)
+        torch.save(self.policy_model.state_dict(), policy_filepath)
 
-        print("Model saved in file: %s" % value_filepath)
-        print("Model saved in file: %s" % policy_filepath)
+        print("Model saved in file:", value_filepath)
+        print("Model saved in file:", policy_filepath)
 
     def load_latest_checkpoint(self, folder):
         print("Loading latest checkpoint...")
@@ -267,20 +260,20 @@ class Trainer:
         if not os.path.exists(policy_folder) or not os.path.exists(value_folder):
             return
 
-        value_checkpoints = glob.glob(os.path.join(value_folder, 'model_*.h5'))
-        policy_checkpoints = glob.glob(os.path.join(policy_folder, 'model_*.h5'))
+        value_checkpoints = glob.glob(os.path.join(value_folder, 'model_*.pt'))
+        policy_checkpoints = glob.glob(os.path.join(policy_folder, 'model_*.pt'))
 
         if len(value_checkpoints) == 0 or len(policy_checkpoints) == 0:
-            print("No Network checkpoints found")
+            print("No network checkpoints found")
             return
 
         # Find the latest checkpoint (highest number in the filename)
         latest_value_checkpoint = max(value_checkpoints, key=os.path.getctime)
         latest_policy_checkpoint = max(policy_checkpoints, key=os.path.getctime)
 
-        self.value_model.model.load_weights(latest_value_checkpoint)
-        self.policy_model.model.load_weights(latest_policy_checkpoint)
+        self.value_model.load_state_dict(torch.load(latest_value_checkpoint, map_location=self.device))
+        self.policy_model.load_state_dict(torch.load(latest_policy_checkpoint, map_location=self.device))
 
-        print("Loaded Value checkpoint from: ", latest_value_checkpoint)
-        print("Loaded Policy checkpoint from: ", latest_policy_checkpoint)
+        print("Loaded Value checkpoint from:", latest_value_checkpoint)
+        print("Loaded Policy checkpoint from:", latest_policy_checkpoint)
         print("Loading checkpoint done.")

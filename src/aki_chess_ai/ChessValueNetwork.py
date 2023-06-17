@@ -1,28 +1,28 @@
-import tensorflow as tf
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 from aki_chess_ai import utils
 
 
-class ChessValueNetwork:
+class ChessValueNetwork(nn.Module):
     def __init__(self):
-        self.model = tf.keras.models.Sequential([
-            # Input shape for the chessboard state
-            tf.keras.layers.Dense(64, activation="relu"),
-            tf.keras.layers.Dense(32, activation="relu"),
-            # Output a single value between -1 and 1
-            tf.keras.layers.Dense(1, activation="tanh")
-        ])
-        self.model.compile(optimizer="adam", loss="mse")
-        self.model.build((None, 64))
+        super(ChessValueNetwork, self).__init__()
+        self.fc1 = nn.Linear(64, 64)
+        self.fc2 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(32, 1)
 
-
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = torch.tanh(self.fc3(x))
+        return x
 
     def predict(self, state, to_play):
         if type(state) == str:
             state = utils.getStateFromFEN(state, to_play=to_play)
 
-        # Reshape the state to match the input shape of the model
-        state = tf.reshape(state, (1, 64))
-        # Predict the value of the state
-        value = self.model.predict(state,verbose=0)[0][0]
-        return value
+        state = torch.tensor(state).float()
+        state = state.view(1, -1)
+        value = self.forward(state)
+        return value.item()

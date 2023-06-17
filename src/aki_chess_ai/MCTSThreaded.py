@@ -55,7 +55,12 @@ class Node:
     def value(self):
         return self.wins / self.visits if self.visits != 0 else 0
     def select_action(self):
-        return sorted(self.children.items(), key=lambda c: c[1].visits)[-1][0]
+        try:
+            return sorted(self.children.items(), key=lambda c: c[1].visits)[-1][0]
+        except Exception as e:
+            print("Ohno i am retarded🫣👦")
+
+
 
     def __repr__(self):
 
@@ -82,7 +87,7 @@ def MCTS_Threaded(rootstate, itermax, policy_model, value_model,max_depth=12):
         if node.untried_actions != []:
             # Use policy network to decide the action
             actions = list(state.legal_moves)
-            action_probs = policy_model.action_probabilitiesThreaded(board_to_input(state,node.turn), actions)
+            action_probs = policy_model.action_probabilitiesThreaded(board_to_input(state, node.turn), actions)
             a = np.random.choice(actions, p=action_probs)
             state.push(a)
             node = node.add_child(a, state.fen())
@@ -136,7 +141,7 @@ def main():
     policy_model = ChessPolicyNetwork()
     value_model = ChessValueNetwork()
     start = time.time()
-    root = MCTS_Threaded(rootstate=state.fen(), itermax=5, policy_model=policy_model, value_model=value_model,max_depth=12)
+    root = MCTS_Threaded(rootstate=state.fen(), itermax=5, policy_model=policy_model, value_model=value_model,max_depth=60)
     duration = time.time() - start
     print(f"Recommended move: {root.select_child()} ({duration:.2f}s)")
 

@@ -63,6 +63,8 @@ def move_to_index(move):
 
 
 def softmax(valid_probs):
+    # Subtracting the maximum value for numerical stability
+    valid_probs -= np.max(valid_probs)
     # Softmax the probabilities
     exp_valid_probs = np.exp(valid_probs)
     sum_valid_probs = np.sum(exp_valid_probs)
