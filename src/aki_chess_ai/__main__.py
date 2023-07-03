@@ -1,4 +1,3 @@
-import tensorflow as tf
 import logging
 
 import torch
@@ -29,7 +28,6 @@ def main():
         "checkpoint_path": "training_models",  # location to save latest set of weights
         "debug": True
     }
-    print("Num GPUs Available: ", len(tf.config.experimental.list_physical_devices('GPU')))
 
     game = ChessEnv()
     valueNetwork = ChessValueNetwork()

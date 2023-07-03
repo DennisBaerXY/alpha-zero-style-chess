@@ -1,7 +1,6 @@
 import time
 
 import chess
-import tensorflow as tf
 import numpy as np
 import random
 from concurrent.futures import ThreadPoolExecutor

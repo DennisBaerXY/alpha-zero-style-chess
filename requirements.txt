@@ -1,6 +1,4 @@
 chess==1.9.4
-keras==2.13.1rc0
 numpy==1.24.3
-tensorflow==2.13.0rc1
-tensorflow_macos==2.13.0rc1
+tensorboard==2.10.0
 torch==2.0.1
