@@ -1,7 +1,14 @@
 # Helper Functions to encode the board state for the neural network
+import json
+
 import chess
 import numpy as np
-
+def write_game_data_to_file(path, data):
+    try:
+        with open(path, "wt") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(e)
 
 
 def getStateFromChessBoard(board: chess.Board, color=chess.WHITE):
@@ -50,7 +57,6 @@ def _encode_piece_color(piece: chess.Piece, color=chess.WHITE):
 
 
 
-
 def move_to_index(move):
     # Convert UCI move to corresponding index
     if isinstance(move, chess.Move):
@@ -60,6 +66,9 @@ def move_to_index(move):
     from_square = chess.parse_square(move[:2])  # e2e4 -> e2
     to_square = chess.parse_square(move[2:4])  # e2e4 -> e4
     return from_square * 64 + to_square
+
+
+
 
 
 def softmax(valid_probs):

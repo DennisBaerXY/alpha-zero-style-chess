@@ -1,18 +1,18 @@
 import datetime
-import multiprocessing
 import os
-import numpy as np
-from random import shuffle
-import logging
+from collections import deque
+from concurrent.futures import ProcessPoolExecutor
+from threading import Thread
 
+import chess
+import chess.pgn
+
+
+import pyperclip
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
-from aki_chess_ai.MCTSThreaded import MCTS_Threaded
-from aki_chess_ai.main import ChessEnv
-from aki_chess_ai.MCTS import MCTS, Node
 from aki_chess_ai.ChessValueNetwork import ChessValueNetwork
 from aki_chess_ai.ChessPolicyNetwork import ChessPolicyNetwork
 
@@ -22,53 +22,56 @@ import glob
 
 import gc
 
+from aki_chess_ai.agnets.ChessPlayer import ChessPlayer
+from aki_chess_ai.config.Config import Config
+from aki_chess_ai.env.ChessEnv import ChessEnv
 
-def execute_episode_func(game, policy_model, value_model, args):
-    logging.info(f'Worker {multiprocessing.current_process().name} is doing something...')
-    train_examples = []
-    current_player = 1
-    state = game.get_state()
 
-    episode_step = 0
-    time_start = time.time()
+def execute_episode_func(config: Config,policy_model: ChessPolicyNetwork, value_model: ChessValueNetwork):
+    env = ChessEnv().reset()
 
-    gc.collect()
-    torch.cuda.empty_cache()  # Clear GPU memory
-    print("Starting new episode")
-    while True:
-        root = MCTS_Threaded(state, itermax=4, policy_model=policy_model, value_model=value_model,
-                             max_depth=10)
-        action_probs = np.zeros(4096)
-        for action, node in root.children.items():
-            # convert action to index -> action is uci string
-            action_probs[utils.move_to_index(action)] = node.visits
-        # Normalize
-        action_probs /= np.sum(action_probs)
-        # Record training example
-        train_examples.append([utils.getStateFromFEN(state, current_player), current_player, action_probs])
+    white = ChessPlayer(value_model, policy_model)
+    black = ChessPlayer(value_model, policy_model)
 
-        # Make move
-        action = root.select_action()
-        if action is None:
-            print("No action selected")
+    while not env.done:
 
-        state, current_player = game.get_next_state_for_game(state, action)
-        if args["debug"]:
-            print("Move {} has been done by {}. Current FEN {} ".format(action,
-                                                                        "White" if -current_player == 1 else "Black",
-                                                                        state))
-        reward = game.get_reward_for_player(state, current_player)
+        if env.white_to_move():
+            action = white.select_move(env)
+        else:
+            action = black.select_move(env)
 
-        episode_step += 1
-        if reward is not None or episode_step > 200:
-            if reward is None:
-                reward = 0
-            print("Reward: ", reward)
-            print("Episode step: ", episode_step)
-            print("Time: ", time.time() - time_start)
+        env.step(action)
+        if env.num_halfmoves >= config.max_game_length:
+            env.adjudicate()
 
-            # Game ended
-            return [(x[0], x[2], reward * ((-1) ** (x[1] != current_player))) for x in train_examples]
+    if env.winner == 1:
+        white_win = 1
+    elif env.winner == -1:
+        white_win = -1
+
+    else:
+        white_win = 0
+
+    white.finish_game(white_win)
+    black.finish_game(-white_win)
+
+    data = []
+    for i in range(len(white.moves)):
+        data.append(white.moves[i])
+        if i < len(black.moves):
+            data.append(black.moves[i])
+    return env, data
+
+
+def pretty_print(env, colors):
+    new_pgn = open("test3.pgn", "at")
+    game = chess.pgn.Game.from_board(env.board)
+    game.headers["Result"] = env.result
+    game.headers["White"], game.headers["Black"] = colors
+    game.headers["Date"] = datetime.datetime.now().strftime("%Y.%m.%d")
+    new_pgn.write(str(game) + "\n\n")
+    new_pgn.close()
+    pyperclip.copy(env.board.fen())
 
 
 class Trainer:
@@ -86,134 +89,65 @@ class Trainer:
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         train_log_dir = f'logs/gradient_tape/{current_time}/train'
         self.writer = SummaryWriter(train_log_dir)
+        self.buffer = []
+
+
+        self.config = Config()
 
         self.global_step = 0
 
-    def execute_episode(self):
-        train_examples = []
-        current_player = 1
-        state = self.game.get_state()
 
-        episode_step = 0
-        time_start = time.time()
-
-        gc.collect()
-        torch.cuda.empty_cache()  # Clear GPU memory
-
-        while True:
-            root = MCTS_Threaded(state, itermax=4, policy_model=self.policy_model, value_model=self.value_model,
-                                 max_depth=10)
-            action_probs = np.zeros(4096)
-            for action, node in root.children.items():
-                # convert action to index -> action is uci string
-                action_probs[utils.move_to_index(action)] = node.visits
-            # Normalize
-            action_probs /= np.sum(action_probs)
-            # Record training example
-            train_examples.append([utils.getStateFromFEN(state, current_player), current_player, action_probs])
-
-            # Make move
-            action = root.select_action()
-            if action is None:
-                print("No action selected")
-
-            state, current_player = self.game.get_next_state_for_game(state, action)
-            if self.args["debug"]:
-                print("Move {} has been done by {}. Current FEN {} ".format(action,
-                                                                            "White" if -current_player == 1 else "Black",
-                                                                            state))
-            reward = self.game.get_reward_for_player(state, current_player)
-
-            episode_step += 1
-            if reward is not None or episode_step > 200:
-                if reward is None:
-                    reward = 0
-                print("Reward: ", reward)
-                print("Episode step: ", episode_step)
-                print("Time: ", time.time() - time_start)
-
-                # Game ended
-                return [(x[0], x[2], reward * ((-1) ** (x[1] != current_player))) for x in train_examples]
 
     def learn(self):
         print("Starting training...")
-
         self.load_latest_checkpoint(folder=".")
 
+        self.buffer = []
         for i in range(self.args["iterations"]):
             print("ITERATION ::: " + str(i + 1))
-            iteration_train_examples = []
+            iteration_train_examples = deque()
 
-            for episode in range(self.args["episodes"]):
-                episode_result = execute_episode_func(self.game, self.policy_model, self.value_model, self.args)
-                iteration_train_examples.extend(episode_result)
+            with ProcessPoolExecutor(max_workers=self.config.max_processes) as executor:
+                for _ in range(self.config.max_processes * 2):
+                    iteration_train_examples.append(
+                        executor.submit(execute_episode_func, self.config, self.policy_model, self.value_model))
+                game_idx = 0    # Game index
+                while True:
+                    game_idx += 1
+                    start_time = time.time()
+                    env, data = iteration_train_examples.popleft().result()
 
-            print("Number of examples: ", len(iteration_train_examples))
+                    print(f"game {game_idx:3} time={time.time() - start_time:5.1f}s "
+                          f"halfmoves={env.num_halfmoves:3} {env.winner:12} "
+                          f"{'by resign ' if env.resigned else '          '}")
+                    pretty_print(env, ("current_model", "current_model"))
+                    self.buffer += data
 
-            shuffle(iteration_train_examples)
-            self.train(iteration_train_examples)
+                    if(game_idx % self.config.max_game_before_training == 0):
+                        self.flush_buffer()
 
-            self.save_checkpoint()
+                    iteration_train_examples.append(
+                        executor.submit(execute_episode_func, self.config, self.policy_model, self.value_model))
+                    # if len(data) > 0:
+                    #     self.train(data)
+                    #     self.save_checkpoint()
+                    #     if len(iteration_train_examples) == 0:
+                    #         break
 
-    def train_step(self, boards, target_pis, target_vs):
-        boards = boards.to(self.device)
-        target_pis = target_pis.to(self.device)
-        target_vs = target_vs.to(self.device)
+    def flush_buffer(self):
+        """
+        Flush the play data buffer and write the data to the appropriate location
+        """
+        rc = self.config.resource
+        game_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S.%f")
+        path = os.path.join(rc.play_data_dir, rc.play_data_filename_tmpl % game_id)
 
-        self.policy_model.train()
-        self.value_model.train()
-
-        out_pi = self.policy_model(boards)
-        out_v = self.value_model(boards)
-
-        l_pi = self.loss_pi(target_pis, out_pi)
-        l_v = self.loss_v(target_vs, out_v)
-
-        self.policy_optimizer.zero_grad()
-        self.value_optimizer.zero_grad()
-        total_loss = l_pi + l_v
-        total_loss.backward()
-        self.policy_optimizer.step()
-        self.value_optimizer.step()
-
-        self.writer.add_scalar('Loss Policy', l_pi.item(), self.global_step)
-        self.writer.add_scalar('Loss Value', l_v.item(), self.global_step)
-
-        return l_pi.item(), l_v.item(), out_pi, out_v
-
-    def train(self, examples):
-        pi_losses = []
-        v_losses = []
-
-        shuffle(examples)
-        for epoch in range(self.args["epochs"]):
-            batch_idx = 0
-            shuffle(examples)
-            while batch_idx < int(len(examples) / self.args['batch_size']):
-                sample_ids = np.random.randint(len(examples), size=self.args['batch_size'])
-                boards, pis, vs = list(zip(*[examples[i] for i in sample_ids]))
-                boards = torch.tensor(boards, dtype=torch.float32, device=self.device)
-                target_pis = torch.tensor(pis, dtype=torch.float32, device=self.device)
-                target_vs = torch.tensor(vs, dtype=torch.float32, device=self.device)
-
-                l_pi, l_v, out_pi, out_v = self.train_step(boards, target_pis, target_vs)
-                self.global_step += 1
-
-                pi_losses.append(l_pi)
-                v_losses.append(l_v)
-
-                batch_idx += 1
-
-            print("Policy Loss", np.mean(pi_losses))
-            print("Value Loss", np.mean(v_losses))
-
-    def loss_pi(self, targets, outputs):
-        loss = -torch.sum(targets * torch.log(outputs), dim=1)
-        return torch.mean(loss)
-
-    def loss_v(self, targets, outputs):
-        loss = torch.sum((targets - outputs.view(-1)) ** 2) / targets.size(0)
-        return loss
+        if not os.path.exists(rc.play_data_dir):
+            os.makedirs(rc.play_data_dir)
+        print(f"save play data to {path}")
+        thread = Thread(target=utils.write_game_data_to_file, args=(path, self.buffer))
+        thread.start()
+        self.buffer = []
 
     def save_checkpoint(self):
         folder = "."

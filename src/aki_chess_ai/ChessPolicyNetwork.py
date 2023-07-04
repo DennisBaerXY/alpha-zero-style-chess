@@ -38,8 +38,7 @@ class ChessPolicyNetwork(nn.Module):
     def action_probabilities(self, state, valid_moves):
         logits = self.predict(state)
 
-        if len(valid_moves) == 1:
-            print("Only one move available")
+
 
         valid_probs = np.array([logits[self._move_to_index(move)] for move in valid_moves])
         valid_probs = utils.softmax(valid_probs)
@@ -48,10 +47,6 @@ class ChessPolicyNetwork(nn.Module):
 
     def action_probabilitiesThreaded(self, state, valid_moves):
         logits = self.predict(state)
-
-        if len(valid_moves) == 1:
-            print("Only one move available")
-
         valid_probs = []
         try:
             valid_probs = np.array([logits[self._move_to_index_threaded(move)] for move in valid_moves])
