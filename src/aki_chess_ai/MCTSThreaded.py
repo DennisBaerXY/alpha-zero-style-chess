@@ -98,7 +98,7 @@ def MCTS_parallel(rootstate, max_iterations, policy_model: ChessPolicyNetwork, v
                 probabilities = policy_model.action_probabilitiesThreaded(fen_to_input(board.fen(), 1 if board.turn else -1), moves)
                 selected_move = np.random.choice(moves, p=probabilities)
                 board.push(selected_move)
-                print(depth, board.fen())
+                
                 depth += 1
 
             # Backpropagation

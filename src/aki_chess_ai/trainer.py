@@ -35,7 +35,7 @@ def execute_episode_func(config: Config,policy_model: ChessPolicyNetwork, value_
 
     while not env.done:
 
-        if env.white_to_move():
+        if env.white_to_move:
             action = white.select_move(env)
         else:
             action = black.select_move(env)
