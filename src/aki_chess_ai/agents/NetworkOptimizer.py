@@ -62,7 +62,7 @@ def convert_to_cheating_data(data):
 
     return np.asarray(state_list, dtype=np.float32), np.asarray(policy_list, dtype=np.float32), np.asarray(value_list, dtype=np.float32)
 class NetworkOptimizer:
-    def __init__(self, lr=0.001, max_epochs=20):
+    def __init__(self, lr=0.001, max_epochs=40):
         """
         :param lr: learning rate
         """

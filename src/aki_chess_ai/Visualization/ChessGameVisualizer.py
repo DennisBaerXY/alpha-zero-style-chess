@@ -20,6 +20,7 @@ class ChessGameVisualizer:
         self.black = ChessPlayer(value_model, policy_model)
         self.config = config
         self.board = display.start(self.env.board.fen())
+        self.score = {"white": 0, "black": 0}
         try:
             self.engine = chess.engine.SimpleEngine.popen_uci(config.demonstration.stockfish_path)
         except:
@@ -30,6 +31,7 @@ class ChessGameVisualizer:
             exit()
 
     def play_game(self):
+        self.reset()
         while not self.env.done:
             if self.env.white_to_move:
                 action = self.white.select_move(self.env)
@@ -47,11 +49,16 @@ class ChessGameVisualizer:
         print("Game over.")
         if self.env.winner == 1:
             print("White wins!")
+            self.score["white"] += 1
 
         elif self.env.winner == -1:
             print("Black wins!")
+            self.score["black"] += 1
         else:
             print("Draw!")
+
+    def reset(self):
+        self.env = ChessEnv().reset()
 
     def update_chess_board(self):
         display.update(self.env.board.fen(), self.board)
@@ -98,4 +105,6 @@ if __name__ == '__main__':
     config = Config()
 
     visualizer = ChessGameVisualizer(Config(), policy_model, value_model)
-    visualizer.play_game()
+    for i in range(10):
+        visualizer.play_game()
+    print(visualizer.score)
