@@ -9,7 +9,7 @@ from aki_chess_ai.ChessPolicyNetwork import ChessPolicyNetwork
 from aki_chess_ai.ChessValueNetwork import ChessValueNetwork
 from aki_chess_ai.agents.ChessPlayer import ChessPlayer
 from aki_chess_ai.config.Config import Config
-from aki_chess_ai.umgebung.ChessEnv import ChessEnv
+from aki_chess_ai.umgebung.ChessEnv import ChessEnv, Winner
 from chessboard import display
 
 
@@ -47,11 +47,11 @@ class ChessGameVisualizer:
             if self.env.num_halfmoves >= self.config.demonstration.max_moves:
                 self.env.adjudicate()
         print("Game over.")
-        if self.env.winner == 1:
+        if self.env.winner == Winner.white:
             print("White wins!")
             self.score["white"] += 1
 
-        elif self.env.winner == -1:
+        elif self.env.winner == Winner.black:
             print("Black wins!")
             self.score["black"] += 1
         else:
@@ -59,7 +59,36 @@ class ChessGameVisualizer:
 
     def reset(self):
         self.env = ChessEnv().reset()
+    def play_game_against_stockfish(self):
+        self.reset()
+        while not self.env.done:
+            if self.env.white_to_move:
+                action = self.white.select_move(self.env)
+            else:
+                action = self.stockfish_select_move(self.env)
 
+            print(f"Move: {action}")
+            self.env.step(action)
+            self.evaluation()
+            self.update_chess_board()
+
+            time.sleep(self.config.demonstration.time_between_moves)
+            if self.env.num_halfmoves >= self.config.demonstration.max_moves:
+                self.env.adjudicate()
+        print("Game over.")
+        if self.env.winner == Winner.white:
+            print("White wins!")
+            self.score["white"] += 1
+
+        elif self.env.winner == Winner.black:
+            print("Black wins!")
+            self.score["black"] += 1
+        else:
+            print("Draw!")
+
+    def stockfish_select_move(self, env):
+        result = self.engine.play(env.board, chess.engine.Limit(time=0.1))
+        return result.move.uci()
     def update_chess_board(self):
         display.update(self.env.board.fen(), self.board)
         display.check_for_quit()
@@ -108,3 +137,4 @@ if __name__ == '__main__':
     for i in range(10):
         visualizer.play_game()
     print(visualizer.score)
+    display.terminate()
