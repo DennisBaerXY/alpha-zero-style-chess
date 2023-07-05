@@ -3,7 +3,7 @@ import numpy as np
 
 from aki_chess_ai import utils
 from aki_chess_ai.MCTSThreaded import  MCTS_parallel
-from aki_chess_ai.env.ChessEnv import ChessEnv
+from aki_chess_ai.umgebung.ChessEnv import ChessEnv
 
 
 class ChessPlayer:
@@ -17,7 +17,7 @@ class ChessPlayer:
     def select_move(self, env: ChessEnv) -> str:
         """
         Selects a move based on the current state of the board.
-        :param env: chess env to play in
+        :param env: chess umgebung to play in
 
         :return:
         """

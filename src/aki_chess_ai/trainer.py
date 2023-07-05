@@ -24,7 +24,7 @@ import gc
 
 from aki_chess_ai.agnets.ChessPlayer import ChessPlayer
 from aki_chess_ai.config.Config import Config
-from aki_chess_ai.env.ChessEnv import ChessEnv
+from aki_chess_ai.umgebung.ChessEnv import ChessEnv
 
 
 def execute_episode_func(config: Config,policy_model: ChessPolicyNetwork, value_model: ChessValueNetwork):
