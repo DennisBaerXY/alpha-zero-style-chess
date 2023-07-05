@@ -7,7 +7,6 @@ from threading import Thread
 import chess
 import chess.pgn
 
-
 import pyperclip
 import torch
 import torch.optim as optim
@@ -22,12 +21,12 @@ import glob
 
 import gc
 
-from aki_chess_ai.agnets.ChessPlayer import ChessPlayer
+from aki_chess_ai.agents.ChessPlayer import ChessPlayer
 from aki_chess_ai.config.Config import Config
 from aki_chess_ai.umgebung.ChessEnv import ChessEnv
 
 
-def execute_episode_func(config: Config,policy_model: ChessPolicyNetwork, value_model: ChessValueNetwork):
+def execute_episode_func(config: Config, policy_model: ChessPolicyNetwork, value_model: ChessValueNetwork):
     env = ChessEnv().reset()
 
     white = ChessPlayer(value_model, policy_model)
@@ -91,12 +90,9 @@ class Trainer:
         self.writer = SummaryWriter(train_log_dir)
         self.buffer = []
 
-
         self.config = Config()
 
         self.global_step = 0
-
-
 
     def learn(self):
         print("Starting training...")
@@ -111,7 +107,7 @@ class Trainer:
                 for _ in range(self.config.max_processes * 2):
                     iteration_train_examples.append(
                         executor.submit(execute_episode_func, self.config, self.policy_model, self.value_model))
-                game_idx = 0    # Game index
+                game_idx = 0  # Game index
                 while True:
                     game_idx += 1
                     start_time = time.time()
@@ -123,7 +119,7 @@ class Trainer:
                     pretty_print(env, ("current_model", "current_model"))
                     self.buffer += data
 
-                    if(game_idx % self.config.max_game_before_training == 0):
+                    if (game_idx % self.config.max_game_before_training == 0):
                         self.flush_buffer()
 
                     iteration_train_examples.append(
@@ -192,13 +188,15 @@ class Trainer:
         value_folder = os.path.join(folder, "value_training_models")
 
         if not os.path.exists(policy_folder) or not os.path.exists(value_folder):
+            print("No checkpoint found")
+            self.save_checkpoint()
             return
 
         value_checkpoints = glob.glob(os.path.join(value_folder, 'model_*.pt'))
         policy_checkpoints = glob.glob(os.path.join(policy_folder, 'model_*.pt'))
 
         if len(value_checkpoints) == 0 or len(policy_checkpoints) == 0:
-            print("No network checkpoints found")
+            self.save_checkpoint()
             return
 
         # Find the latest checkpoint (highest number in the filename)

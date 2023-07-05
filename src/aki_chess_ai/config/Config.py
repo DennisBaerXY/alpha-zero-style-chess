@@ -38,12 +38,18 @@ def create_uci_labels():
                 labels_array.append(l + '2' + l_r + '1' + p)
                 labels_array.append(l + '7' + l_r + '8' + p)
     return labels_array
-
+class DemonstrationConfig:
+    def __init__(self):
+        self.time_between_moves = 0.5
+        self.max_moves = 500
+        self.stockfish_path = "D:/Users/Dennis/Downloads/stockfish/stockfish-windows-x86-64-avx2.exe"
 class Config():
     def __init__(self):
+        self.demonstration = DemonstrationConfig()
         self.max_processes = 3
         self. self_play = True
         self.max_game_length = 200
         self.max_game_before_training = 10
+
 
         self.resource = ResourceConfig()

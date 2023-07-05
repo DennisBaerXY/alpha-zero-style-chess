@@ -1,6 +1,6 @@
 # Pipfile.lock is headache inducing.
 Pipfile.lock
-
+data/
 # to everyone their own
 .vscode/
 .idea/
