@@ -4,13 +4,13 @@ import time
 
 import torch
 import chess.engine
+from chessboard import display
 
 from aki_chess_ai.ChessPolicyNetwork import ChessPolicyNetwork
 from aki_chess_ai.ChessValueNetwork import ChessValueNetwork
 from aki_chess_ai.agents.ChessPlayer import ChessPlayer
 from aki_chess_ai.config.Config import Config
 from aki_chess_ai.umgebung.ChessEnv import ChessEnv, Winner
-from chessboard import display
 
 
 class ChessGameVisualizer:
@@ -90,6 +90,7 @@ class ChessGameVisualizer:
         result = self.engine.play(env.board, chess.engine.Limit(time=0.1))
         return result.move.uci()
     def update_chess_board(self):
+
         display.update(self.env.board.fen(), self.board)
         display.check_for_quit()
 
@@ -134,7 +135,7 @@ if __name__ == '__main__':
     config = Config()
 
     visualizer = ChessGameVisualizer(Config(), policy_model, value_model)
-    for i in range(10):
+    for i in range(100):
         visualizer.play_game()
     print(visualizer.score)
     display.terminate()

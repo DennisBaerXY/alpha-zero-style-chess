@@ -40,9 +40,9 @@ def create_uci_labels():
     return labels_array
 class DemonstrationConfig:
     def __init__(self):
-        self.time_between_moves = 0.1
-        self.max_moves = 500
-        self.stockfish_path = "D:/Users/Dennis/Downloads/stockfish/stockfish-windows-x86-64-avx2.exe"
+        self.time_between_moves = 0
+        self.max_moves = 200
+        self.stockfish_path = "/opt/homebrew/bin/stockfish"
 class Config():
     def __init__(self):
         self.demonstration = DemonstrationConfig()
